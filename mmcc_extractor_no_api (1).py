@@ -131,8 +131,37 @@ for key, cols in (("inv", INV_COLUMNS), ("tm", TM_COLUMNS)):
 # ============================================================================
 @st.cache_resource(show_spinner="Loading text reader (first run only)…")
 def get_ocr():
-    from rapidocr_onnxruntime import RapidOCR
-    return RapidOCR()
+    try:
+        from rapidocr import RapidOCR                  # new package (rapidocr 2.x / 3.x)
+        return RapidOCR(), "new"
+    except ImportError:
+        pass
+    try:
+        from rapidocr_onnxruntime import RapidOCR      # old package (rapidocr-onnxruntime)
+        return RapidOCR(), "old"
+    except ImportError:
+        st.error("Text reader not installed. In your terminal run:  "
+                 "python -m pip install rapidocr onnxruntime   then restart the app.")
+        st.stop()
+
+
+def ocr_image(img: Image.Image):
+    engine, kind = get_ocr()
+    arr = np.array(img)
+    items = []
+    if kind == "new":
+        out = engine(arr)
+        if out.boxes is not None and out.txts:
+            items = zip(out.boxes.tolist(), out.txts)
+    else:
+        result, _ = engine(arr)
+        items = [(r[0], r[1]) for r in (result or [])]
+    boxes = []
+    for pts, text in items:
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        boxes.append({"x0": min(xs), "x1": max(xs), "y0": min(ys), "y1": max(ys),
+                      "text": str(text).strip()})
+    return boxes_to_rows(boxes)
 
 
 def open_image(file, max_side=2400) -> Image.Image:
@@ -172,14 +201,6 @@ def boxes_to_rows(boxes):
         rows.append(cells)
     return rows
 
-
-def ocr_image(img: Image.Image):
-    result, _ = get_ocr()(np.array(img))
-    boxes = []
-    for pts, text, _score in result or []:
-        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        boxes.append({"x0": min(xs), "x1": max(xs), "y0": min(ys), "y1": max(ys), "text": text.strip()})
-    return boxes_to_rows(boxes)
 
 
 def to_jpg(img, max_side=1600):
