@@ -5,3 +5,5 @@ pillow>=10.0
 pillow-heif>=0.16
 pymupdf>=1.24
 openai>=1.40
+rapidocr>=3.0
+onnxruntime
